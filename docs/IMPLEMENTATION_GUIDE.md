@@ -1,3 +1,5 @@
+{% raw %}
+
 # Home Assistant, Tesla Powerwall 3 and PredBat
 
 
@@ -2123,3 +2125,5 @@ async def async_setup_entry(
 | Network/proxy settings | Use your own trusted proxy subnet and never copy the example network range without checking your topology. |
 
 | Notification target | Replace the placeholder notify service with your own mobile or notification service. |
+
+{% endraw %}
