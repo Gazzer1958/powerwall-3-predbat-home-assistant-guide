@@ -1,0 +1,315 @@
+predbat_force_charge_tariff_tesla:
+  alias: Predbat - Force Charge Tariff Tesla
+  description: Set Powerwall tariff to 5p import / 5p export using Tesla Fleet TOU.
+  mode: single
+  sequence:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.predbat_force_charge_tariff_status
+    data:
+      value: running
+  - action: tesla_fleet_tou_test.set_force_charge_tariff
+    data:
+      site_id: !secret tesla_energy_site_id
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.predbat_force_charge_tariff_status
+    data:
+      value: success
+  - action: persistent_notification.create
+    data:
+      title: Powerwall force-charge tariff set
+      notification_id: predbat_powerwall_force_charge_tariff
+      message: 'Powerwall force-charge tariff set using Tesla Fleet TOU.
+
+
+        Import: £0.05/kWh
+
+        Export: £0.05/kWh
+
+
+        Tariff write completed.
+
+        '
+predbat_force_discharge_tariff_tesla:
+  alias: Predbat - Force Discharge Tariff Tesla
+  description: Set Powerwall tariff to 80p/80p for six hours using Tesla Fleet TOU.
+  mode: single
+  sequence:
+  - action: tesla_fleet_tou_test.set_force_discharge_tariff
+    data:
+      site_id: !secret tesla_energy_site_id
+  - action: persistent_notification.create
+    data:
+      title: Powerwall force-discharge tariff set
+      notification_id: predbat_powerwall_force_discharge_tariff
+      message: 'Powerwall force-discharge tariff set using Tesla Fleet TOU.
+
+
+        Peak import: £0.80/kWh
+
+        Peak export: £0.80/kWh
+
+
+        Off-peak import: £0.30/kWh
+
+        Off-peak export: £0.12/kWh
+
+
+        Six-hour discharge tariff was written successfully.
+
+        '
+predbat_start_force_charge_tesla:
+  alias: Predbat - Start Force Charge Tesla
+  description: Set and verify the 5p/5p Tesla Fleet tariff once, then configure the Powerwall for force charge.
+    PredBat remains responsible for battery reserve/SOC control.
+  mode: single
+  sequence:
+  - action: script.predbat_force_charge_tariff_tesla
+    continue_on_error: true
+  - wait_template: '{{ states(''input_text.predbat_force_charge_tariff_status'') in [''success'', ''failed''] }}'
+    timeout:
+      seconds: 30
+    continue_on_timeout: true
+  - variables:
+      tariff_status: '{{ states(''input_text.predbat_force_charge_tariff_status'') }}'
+  - if:
+    - condition: template
+      value_template: '{{ tariff_status != ''success'' }}'
+    then:
+    - action: script.predbat_safe_state_tesla
+      continue_on_error: true
+    - action: persistent_notification.create
+      data:
+        title: PredBat force charge NOT started
+        notification_id: predbat_force_charge_status
+        message: '5p/5p Tesla Fleet tariff was not successfully verified.
+
+          Tariff script status: {{ tariff_status }}
+
+          The Powerwall has been returned to the safe normal operating controls.
+
+          No further Powerwall parameter changes were made.
+
+          Force charging was NOT started.
+
+          '
+    - stop: Tesla Fleet force-charge tariff was not successfully verified; force charge not started.
+  - action: select.select_option
+    target:
+      entity_id: select.your_energy_site_operation_mode
+    data:
+      option: autonomous
+  - action: switch.turn_on
+    target:
+      entity_id: switch.your_energy_site_allow_charging_from_grid
+  - action: persistent_notification.create
+    data:
+      title: PredBat force charge started
+      notification_id: predbat_force_charge_status
+      message: '5p/5p Tesla Fleet tariff successfully verified.
+
+
+        Powerwall configured for force charging:
+
+        autonomous mode (Savings), grid charging enabled.
+
+
+        Battery reserve/SOC remains controlled by PredBat.
+
+        '
+predbat_safe_state_tesla:
+  alias: Predbat - Safe State Tesla
+  description: Return the Powerwall to the normal non-forced operating state.
+  mode: single
+  sequence:
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Started
+      notification_id: predbat_safe_state_debug_started
+      message: Safe State started. Current mode={{ states('select.your_energy_site_operation_mode') }}, grid charging={{
+        states('switch.your_energy_site_allow_charging_from_grid') }}, export={{ states('select.your_energy_site_allow_export')
+        }}, reserve={{ states('number.your_energy_site_backup_reserve') }}%.
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Setting operation mode
+      notification_id: predbat_safe_state_debug_mode_setting
+      message: 'Requesting operation mode: self_consumption'
+  - action: select.select_option
+    target:
+      entity_id: select.your_energy_site_operation_mode
+    data:
+      option: self_consumption
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Operation mode result
+      notification_id: predbat_safe_state_debug_mode_result
+      message: Requested=self_consumption. Reported={{ states('select.your_energy_site_operation_mode') }}.
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Setting grid charging
+      notification_id: predbat_safe_state_debug_grid_setting
+      message: 'Requesting grid charging: off'
+  - action: switch.turn_off
+    target:
+      entity_id: switch.your_energy_site_allow_charging_from_grid
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Grid charging result
+      notification_id: predbat_safe_state_debug_grid_result
+      message: Requested=off. Reported={{ states('switch.your_energy_site_allow_charging_from_grid') }}.
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Setting export mode
+      notification_id: predbat_safe_state_debug_export_setting
+      message: 'Requesting export mode: pv_only'
+  - action: select.select_option
+    target:
+      entity_id: select.your_energy_site_allow_export
+    data:
+      option: pv_only
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Export mode result
+      notification_id: predbat_safe_state_debug_export_result
+      message: Requested=pv_only. Reported={{ states('select.your_energy_site_allow_export') }}.
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State - Final values
+      notification_id: predbat_safe_state_debug_final
+      message: 'Final values: mode={{ states(''select.your_energy_site_operation_mode'') }}, grid charging={{ states(''switch.your_energy_site_allow_charging_from_grid'')
+        }}, export={{ states(''select.your_energy_site_allow_export'') }}, reserve={{ states(''number.your_energy_site_backup_reserve'')
+        }}%.'
+  - action: persistent_notification.create
+    data:
+      title: Predbat - Safe State
+      notification_id: predbat_safe_state
+      message: Safe State completed successfully. Mode={{ states('select.your_energy_site_operation_mode') }}, grid
+        charging={{ states('switch.your_energy_site_allow_charging_from_grid') }}, export={{ states('select.your_energy_site_allow_export')
+        }}, reserve={{ states('number.your_energy_site_backup_reserve') }}%.
+predbat_start_force_discharge_tesla:
+  alias: Predbat - Start Force Discharge Tesla
+  description: Set and verify the 80p/80p Tesla Fleet force-discharge tariff once, then configure Powerwall for
+    force discharge/export. The Tesla API does not allow the sell tariff to be higher than the buy tariff, so the
+    force-discharge tariff uses 80p/kWh for both import and export during the force-discharge window. This script
+    does not set or monitor battery reserve/SOC; PredBat remains responsible for reserve/SOC control. Read-only
+    mode and final restoration are handled by the calling coordinator.
+  mode: single
+  sequence:
+  - action: script.predbat_force_discharge_tariff_tesla
+    continue_on_error: true
+  - wait_template: '{{ states(''input_text.predbat_force_discharge_tariff_status'') in [''success'', ''failed'']
+      }}'
+    timeout:
+      seconds: 30
+    continue_on_timeout: true
+  - variables:
+      tariff_status: '{{ states(''input_text.predbat_force_discharge_tariff_status'') }}'
+  - if:
+    - condition: template
+      value_template: '{{ tariff_status != ''success'' }}'
+    then:
+    - action: script.predbat_safe_state_tesla
+      continue_on_error: true
+    - action: persistent_notification.create
+      data:
+        title: PredBat force discharge NOT started
+        notification_id: predbat_force_discharge_status
+        message: '80p/80p Tesla Fleet force-discharge tariff was not successfully verified.
+
+
+          Tariff script status: {{ tariff_status }}
+
+
+          The Powerwall has been returned to the safe normal operating controls.
+
+          No further tariff write was attempted.
+
+
+          Force discharge/export was NOT started.
+
+          '
+    - stop: Force-discharge tariff was not successfully verified; force discharge not started.
+  - action: switch.turn_off
+    target:
+      entity_id: switch.your_energy_site_allow_charging_from_grid
+  - action: select.select_option
+    target:
+      entity_id: select.your_energy_site_operation_mode
+    data:
+      option: autonomous
+  - action: select.select_option
+    target:
+      entity_id: select.your_energy_site_allow_export
+    data:
+      option: battery_ok
+  - action: persistent_notification.create
+    data:
+      title: PredBat force discharge started
+      notification_id: predbat_force_discharge_status
+      message: '80p/80p Tesla Fleet force-discharge tariff successfully verified.
+
+
+        Powerwall configured for force discharge/export:
+
+        autonomous mode, grid charging disabled,
+
+        battery export enabled.
+
+
+        Battery reserve/SOC is controlled by PredBat.
+
+        '
+predbat_restore_powerwall_tariff_tesla:
+  alias: Predbat - Restore Powerwall Tariff Tesla
+  description: Set Powerwall tariff to 30p import / 12p export using Tesla Fleet.
+  mode: single
+  sequence:
+  - action: tesla_fleet_tou_test.restore_neutral
+    data:
+      site_id: !secret tesla_energy_site_id
+  - action: persistent_notification.create
+    data:
+      title: Powerwall tariff restore requested
+      notification_id: predbat_powerwall_tariff_restore
+      message: 'The neutral Powerwall tariff was sent using Tesla Fleet.
+
+
+        Import: £0.30/kWh
+
+        Export: £0.12/kWh
+
+        '
+predbat_stop_force_charge_tesla:
+  alias: Predbat - Stop Force Charge Tesla
+  description: Return Powerwall to the safe normal state, then restore the neutral tariff using Tesla Fleet.
+  mode: single
+  sequence:
+  - action: script.predbat_safe_state_tesla
+  - action: script.predbat_restore_powerwall_tariff_tesla
+  - action: persistent_notification.create
+    data:
+      title: PredBat force charge stopped
+      notification_id: predbat_force_charge_status
+      message: 'Powerwall returned to normal operation and the
+
+        30p/12p Tesla Fleet tariff restore script was run.
+
+        '
+predbat_stop_force_discharge_tesla:
+  alias: Predbat - Stop Force Discharge Tesla
+  description: Stop deliberate battery export, then restore the neutral 30p/12p tariff using Tesla Fleet.
+  mode: single
+  sequence:
+  - action: script.predbat_safe_state_tesla
+  - action: script.predbat_restore_powerwall_tariff_tesla
+  - action: persistent_notification.create
+    data:
+      title: PredBat force discharge stopped
+      notification_id: predbat_force_discharge_status
+      message: 'Deliberate battery export stopped.
+
+
+        Powerwall returned to normal operation and the
+
+        30p/12p Tesla Fleet tariff restore script was run.'

@@ -1,0 +1,224 @@
+pred_bat:
+  module: predbat
+  class: PredBat
+
+  # PredBat export/force-operation control
+  export_control: true
+  set_export_force: true
+  combine_charge_discharge: true
+
+  # Sets the prefix for all created entities in HA
+  prefix: predbat
+
+  timezone: Europe/London
+
+  currency_symbols:
+    - '£'
+    - 'p'
+
+  threads: auto
+  charge_control_immediate: false
+
+  # ---------------------------------------------------------------------------
+  # Tesla Powerwall via Tesla Fleet
+  #
+  # These example entity IDs assume a fresh Tesla Fleet-only installation.
+  # If another integration has already created matching entities, Home Assistant
+  # may append a suffix. Select the Tesla Fleet entities and update
+  # the references consistently.
+  # ---------------------------------------------------------------------------
+  inverter_type: tesla
+  inverter:
+    - name: "Tesla Powerwall via Tesla Fleet"
+      has_rest_api: false
+      has_mqtt_api: false
+      has_export_limit: false
+      output_charge_control: "soc"
+      has_charge_enable_time: false
+      has_discharge_enable_time: false
+      has_target_soc: false
+      has_reserve_soc: true
+      has_ge_inverter_mode: false
+      charge_time_format: "S"
+      charge_time_entity_is_option: false
+      soc_units: "%"
+      num_load_entities: 1
+      time_button_press: false
+      clock_time_format: "%Y-%m-%d %H:%M:%S"
+      write_and_poll_sleep: 5
+      has_time_window: false
+      support_charge_freeze: false
+      support_discharge_freeze: false
+      has_idle_time: false
+
+  inverter_charge_enable: "switch.your_energy_site_allow_charging_from_grid"
+  
+  inverter_reserve: "number.your_energy_site_backup_reserve"
+
+  inverter_battery_power: sensor.your_energy_site_battery_power
+
+  inverter_battery_power_is_negative: true
+  inverter_power_factor: 1000
+  tesla_force_export: true
+
+  # ---------------------------------------------------------------------------
+  # Power-flow sensors
+  #
+  #
+  # ACTIVE CONFIGURATION:
+  # These inputs now use the Tesla Fleet API entities.
+  # ---------------------------------------------------------------------------
+
+  battery_power:
+    - sensor.your_energy_site_battery_power
+
+  battery_power_invert:
+    - false
+
+  pv_power:
+    - sensor.your_energy_site_solar_power
+
+  load_power:
+    - sensor.your_energy_site_load_power
+
+  grid_power:
+    - sensor.your_energy_site_grid_power
+
+  grid_power_invert:
+    - true
+
+  inverter_reserve_max: 100
+
+  load_today:
+    - sensor.your_energy_site_home_usage
+
+  import_today:
+    - sensor.your_energy_site_grid_imported
+
+  export_today:
+    - sensor.your_energy_site_grid_exported
+
+  pv_today:
+    - sensor.your_energy_site_solar_generated
+
+  reserve: number.your_energy_site_backup_reserve
+
+  soc_percent:
+    - sensor.your_energy_site_percentage_charged
+
+  # Powerwall 3 + Expansion Pack nominal usable capacity
+  soc_max:
+    - 27
+
+  # ---------------------------------------------------------------------------
+  # Tesla Fleet charge/discharge control services
+  #
+  #
+  #
+  # Fleet migration of the PredBat telemetry and inverter control entities
+  # ---------------------------------------------------------------------------
+  charge_start_service:
+   - service: script.predbat_start_force_charge_tesla
+
+  charge_freeze_service:
+   - service: script.predbat_stop_force_charge_tesla
+
+  charge_stop_service:
+    - service: script.predbat_stop_force_charge_tesla
+
+  discharge_start_service:
+   - service: script.predbat_start_force_discharge_tesla
+
+  discharge_stop_service:
+   - service: script.predbat_stop_force_discharge_tesla
+
+  # ---------------------------------------------------------------------------
+  # Inverter / battery power limits
+  # ---------------------------------------------------------------------------
+  # EXAMPLE ONLY: 11040 W. Set this to the inverter's rated power limit for your installation.
+  inverter_limit: 11040
+  battery_rate_max:
+    # EXAMPLE ONLY: maximum battery charge/discharge power in W; check your battery/inverter specifications.
+    - 11040
+  battery_charge_power_curve:
+    100: 1.0
+  battery_discharge_power_curve:
+    1: 1.0
+
+  # EXAMPLE ONLY: set to the permitted export limit for your site, not automatically the inverter rating.
+  export_limit:
+    # EXAMPLE ONLY: 11040 W. Change to your DNO/agreed export limit and system configuration.
+    - 11040
+
+  # EXAMPLE VALUES BELOW ARE FOR THIS GUIDE'S PW3 + Expansion Pack setup.
+  # CHANGE BOTH LIMITS to match the maximum charge/discharge rates supported by your own battery and inverter.
+  # Powerwall 3 + Expansion Pack maximum charge rate is 10 kW
+  inverter_limit_charge:
+    # EXAMPLE ONLY: 10000 W charge limit for the PW3 + Expansion Pack configuration used in this guide.
+    - 10000
+  inverter_limit_discharge:
+    # EXAMPLE ONLY: 11040 W discharge limit used in this guide; verify against your hardware.
+    - 11040
+
+  # ---------------------------------------------------------------------------
+  # Solcast
+  # ---------------------------------------------------------------------------
+  solcast_host: 'https://api.solcast.com.au/'
+  solcast_api_key: !secret solcast_api_key  # stored in AppDaemon's secrets.yaml
+  solcast_sites:  # CHANGE: replace both example IDs with your own Solcast rooftop/site IDs
+    - 'YOUR_SOLCAST_SITE_ID_1'
+    - 'YOUR_SOLCAST_SITE_ID_2'
+  solcast_poll_hours: 8
+
+  pv_forecast_today: sensor.solcast_pv_forecast_forecast_today
+  pv_forecast_tomorrow: sensor.solcast_pv_forecast_forecast_tomorrow
+  pv_forecast_d3: sensor.solcast_pv_forecast_forecast_day_3
+  pv_forecast_d4: sensor.solcast_pv_forecast_forecast_day_4
+
+  # ---------------------------------------------------------------------------
+  # Octopus tariff sensors
+  # ---------------------------------------------------------------------------
+  metric_octopus_import: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_rate)'
+  metric_octopus_export: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_export_current_rate)'
+  metric_standing_charge: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_standing_charge)'
+
+  # ---------------------------------------------------------------------------
+  # Nordpool market energy rates
+  # ---------------------------------------------------------------------------
+  futurerate_url: 'https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices?date=DATE&market=N2EX_DayAhead&deliveryArea=UK&currency=GBP'
+  futurerate_adjust_import: true
+  futurerate_adjust_export: true
+
+  # ---------------------------------------------------------------------------
+  # Financial optimisation
+  # ---------------------------------------------------------------------------
+  calculate_day_cost: true
+  include_standing_charge: false
+  forward_cost_only: false
+
+  rates_export:
+    - rate: 12.0
+
+  # Export threshold
+  best_discharge_rate: 0.0
+
+  days_previous:
+    - 7
+  days_previous_weight:
+    - 1
+
+  forecast_hours: 48
+  forecast_plan_hours: 48
+  battery_scaling: 1.0
+  import_export_scaling: 1.0
+
+  # ---------------------------------------------------------------------------
+  # Export triggers
+  # ---------------------------------------------------------------------------
+  export_triggers:
+    - name: 'large'
+      minutes: 60
+      energy: 1.0
+    - name: 'small'
+      minutes: 15
+      energy: 0.25
